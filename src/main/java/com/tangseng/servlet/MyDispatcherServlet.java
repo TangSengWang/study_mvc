@@ -4,12 +4,10 @@ import com.tangseng.Annotation.Autowired;
 import com.tangseng.Annotation.Controller;
 import com.tangseng.Annotation.RequestMapping;
 import com.tangseng.Annotation.Service;
+import com.tangseng.HttpServlet.MyRequest;
+import com.tangseng.HttpServlet.MyResponse;
 
 
-import javax.servlet.*;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -17,23 +15,22 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
 
-public class MyDispatcherServlet extends HttpServlet {
+public class MyDispatcherServlet  {
 
-    private Properties properties = new Properties();
-
-
-    private List<String> classArr  = new ArrayList<>();
+    private static Properties properties = new Properties();
 
 
-    private Map<String ,Object> ioc = new HashMap<>();
+    private static List<String> classArr  = new ArrayList<>();
 
-    private Map<String ,Method> HandlerMapping = new HashMap<>();
 
-    private Map<Method,Object> ControllerMap = new HashMap<>();
+    private static Map<String ,Object> ioc = new HashMap<>();
 
-    @Override
-    public void init(ServletConfig config) throws ServletException {
-        initConfig(config);
+    private static Map<String ,Method> HandlerMapping = new HashMap<>();
+
+    private static Map<Method,Object> ControllerMap = new HashMap<>();
+
+    public static void init() {
+        initConfig();
         loadClass(properties.getProperty("scanPackage"));
         Instance();
         Autowired();
@@ -42,7 +39,7 @@ public class MyDispatcherServlet extends HttpServlet {
 
     }
 
-    private void initHandlerMapping() {
+    private static void initHandlerMapping() {
         if(ioc.isEmpty()){
             return;
         }
@@ -74,7 +71,7 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
-    private void Autowired() {
+    private static void Autowired() {
         if(ioc.isEmpty()){
             return;
         }
@@ -100,11 +97,11 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
-    public String toLowerFirstWord(String str){
+    public static String toLowerFirstWord(String str){
 
         return str.charAt(0)+"".toLowerCase()+ str.substring(1);
     }
-    private void Instance() {
+    private static void Instance() {
         if(classArr.isEmpty()){
             return;
         }
@@ -135,8 +132,8 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
-    private void loadClass(String url) {
-        URL resource = this.getClass().getClassLoader().getResource("/" + url.replace('.', '/'));
+    private static void loadClass(String url) {
+        URL resource = MyDispatcherServlet.class.getClassLoader().getResource( url.replace('.', '/'));
         File superFile = new File(resource.getFile());
         for (File file : superFile.listFiles())
         {
@@ -155,59 +152,47 @@ public class MyDispatcherServlet extends HttpServlet {
 
     }
 
-    @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException
-    {
-        doPost(req,resp);
-    }
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException
-    {
-        doDispatch(req,resp);
-    }
 
-    private void doDispatch(HttpServletRequest req, HttpServletResponse resp) {
+    public static  void doDispatch(MyRequest req, MyResponse resp) {
         if(HandlerMapping.isEmpty()){
             return;
         }
-        String requestURI = req.getRequestURI();
-        String contextPath = req.getContextPath();
-        requestURI= requestURI.replace(contextPath, "");
+        String url = req.getURL();
 
-        if(!HandlerMapping.containsKey(requestURI)){
+
+
+        if(!HandlerMapping.containsKey(url)){
             try {
-                resp.getWriter().print("404");
+                resp.write("404");
                 return;
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
-        Method method = HandlerMapping.get(requestURI);
+        Method method = HandlerMapping.get(url);
         Class<?>[] parameterTypes = method.getParameterTypes();
-        Map<String, String[]> parameterMap = req.getParameterMap();
+        Map<String, String> parameterMap = req.getParameterMap();
         Object [] paramValues= new Object[parameterTypes.length];
         System.out.println(parameterTypes);
         for(int i = 0 ;i<parameterTypes.length;i++){
             String className = parameterTypes[i].getSimpleName();
-            if("HttpServletRequest".equals(className)){
+            if("MyRequest".equals(className)){
                 paramValues[i]=req;
             }
-            if("HttpServletResponse".equals(className)){
+            if("MyResponse".equals(className)){
                 paramValues[i]=resp;
             }
             if("String".equals(className)){
                 String params="";
 
-                for(Map.Entry<String,String[]> param:parameterMap.entrySet()){
-                    String value =Arrays.toString(param.getValue()).replaceAll("\\[|\\]", "").replaceAll(",\\s", ",");
-                    paramValues[i] = value;
+                for(Map.Entry<String,String> param:parameterMap.entrySet()){
+                    //String value =Arrays.toString(param.getValue()).replaceAll("\\[|\\]", "").replaceAll(",\\s", ",");
+                    paramValues[i] = param.getValue();
                 }
             }
         }
         try {
-            Method method1 = HandlerMapping.get(requestURI);
+            Method method1 = HandlerMapping.get(url);
             Object o = ControllerMap.get(method1);
             Object obj = ioc.get(o);
 
@@ -220,10 +205,10 @@ public class MyDispatcherServlet extends HttpServlet {
         }
     }
 
-    private void initConfig(ServletConfig config) {
+    private static void initConfig() {
         InputStream scanPackage=null;
         try {
-            scanPackage = this.getClass().getClassLoader().getResourceAsStream(config.getInitParameter("contextConfigLocation"));
+            scanPackage = MyDispatcherServlet.class.getClassLoader().getResourceAsStream("application.properties");
             properties.load(scanPackage);
 
         }catch (Exception e){
